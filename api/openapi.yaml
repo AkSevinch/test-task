@@ -1,0 +1,395 @@
+openapi: 3.0.3
+info:
+  title: Information Exchange Service
+  description: |
+    API для обмена информацией об угрозах.
+
+    Модель угрозы расширена по сравнению с исходной спецификацией: добавлены
+    классификация, критичность, статус проверки, метаданные файла и временные
+    метки. Все строковые значения MD5 нормализуются к нижнему регистру.
+  version: 1.0.0
+
+paths:
+  /info:
+    post:
+      summary: Создать новую запись об угрозе
+      description: |
+        Добавляет новую информацию об угрозе. MD5 должен быть уникальным.
+        Обязательны только `md5` и `name`, остальные поля заполняются
+        значениями по умолчанию.
+      operationId: createThreat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThreatCreateRequest'
+      responses:
+        '201':
+          description: Запись успешно создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreatResponse'
+        '400':
+          description: Некорректные данные запроса (например, невалидный MD5)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Угроза с таким MD5 уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /info/{md5}:
+    parameters:
+      - name: md5
+        in: path
+        required: true
+        description: MD5-хеш файла (32 шестнадцатеричных символа)
+        schema:
+          type: string
+          pattern: '^[a-fA-F0-9]{32}$'
+          example: "d41d8cd98f00b204e9800998ecf8427e"
+    get:
+      summary: Получить информацию об угрозе по MD5
+      description: Возвращает полную информацию об угрозе для указанного MD5-хеша.
+      operationId: getInfoByMd5
+      responses:
+        '200':
+          description: Успешный ответ с информацией об угрозе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreatResponse'
+        '400':
+          description: Некорректный формат MD5
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Угроза с указанным MD5 не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Обновить информацию об угрозе по MD5
+      description: |
+        Полностью заменяет информацию о существующей угрозе. Поле `name`
+        обязательно; не переданные опциональные поля сбрасываются к значениям
+        по умолчанию. Идентификатор MD5 берётся из пути и не может быть изменён.
+      operationId: updateThreat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThreatUpdateRequest'
+      responses:
+        '200':
+          description: Информация успешно обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreatResponse'
+        '400':
+          description: Некорректные данные запроса или MD5
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Угроза с указанным MD5 не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    ThreatType:
+      type: string
+      description: Классификация угрозы
+      enum:
+        - trojan
+        - virus
+        - worm
+        - ransomware
+        - spyware
+        - adware
+        - rootkit
+        - backdoor
+        - miner
+        - pua
+        - other
+      default: other
+
+    Severity:
+      type: string
+      description: Уровень критичности
+      enum:
+        - low
+        - medium
+        - high
+        - critical
+      default: medium
+
+    Status:
+      type: string
+      description: Статус проверки записи
+      enum:
+        - active
+        - inactive
+        - false_positive
+        - under_review
+      default: active
+
+    ThreatCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - md5
+        - name
+      properties:
+        md5:
+          type: string
+          pattern: '^[a-fA-F0-9]{32}$'
+          description: MD5-хеш файла (32 шестнадцатеричных символа)
+          example: "d41d8cd98f00b204e9800998ecf8427e"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Название угрозы
+          example: "Trojan.Win32.Generic"
+        threat_type:
+          $ref: '#/components/schemas/ThreatType'
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/Status'
+        description:
+          type: string
+          maxLength: 4096
+          description: Подробное описание угрозы
+          example: "Крадёт учётные данные из браузеров."
+        file_type:
+          type: string
+          maxLength: 255
+          description: Определение типа файла
+          example: "PE32 executable"
+        file_size:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Размер файла в байтах
+          example: 124928
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: Уверенность детекции в процентах
+          example: 95
+        tags:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          description: Теги угрозы
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          example:
+            - banker
+            - windows
+        source:
+          type: string
+          maxLength: 64
+          description: Источник записи
+          example: "manual"
+        first_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время первого обнаружения
+          example: "2024-01-15T10:30:00Z"
+        last_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время последнего обнаружения
+          example: "2024-02-01T08:00:00Z"
+
+    ThreatUpdateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Название угрозы
+          example: "Trojan.Win32.Generic"
+        threat_type:
+          $ref: '#/components/schemas/ThreatType'
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/Status'
+        description:
+          type: string
+          maxLength: 4096
+          description: Подробное описание угрозы
+        file_type:
+          type: string
+          maxLength: 255
+          description: Определение типа файла
+        file_size:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Размер файла в байтах
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: Уверенность детекции в процентах
+        tags:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          description: Теги угрозы
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        source:
+          type: string
+          maxLength: 64
+          description: Источник записи
+        first_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время первого обнаружения
+        last_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время последнего обнаружения
+
+    ThreatResponse:
+      type: object
+      required:
+        - md5
+        - name
+        - threat_type
+        - severity
+        - status
+        - description
+        - file_type
+        - file_size
+        - tags
+        - source
+        - created_at
+        - updated_at
+      properties:
+        md5:
+          type: string
+          pattern: '^[a-f0-9]{32}$'
+          description: MD5-хеш (нормализован к нижнему регистру)
+          example: "d41d8cd98f00b204e9800998ecf8427e"
+        name:
+          type: string
+          description: Название угрозы
+          example: "Trojan.Win32.Generic"
+        threat_type:
+          $ref: '#/components/schemas/ThreatType'
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/Status'
+        description:
+          type: string
+          description: Подробное описание угрозы
+        file_type:
+          type: string
+          description: Определение типа файла
+        file_size:
+          type: integer
+          format: int64
+          description: Размер файла в байтах
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: Уверенность детекции в процентах
+        tags:
+          type: array
+          description: Теги угрозы
+          items:
+            type: string
+        source:
+          type: string
+          description: Источник записи
+        first_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время первого обнаружения
+        last_seen:
+          type: string
+          format: date-time
+          nullable: true
+          description: Время последнего обнаружения
+        created_at:
+          type: string
+          format: date-time
+          description: Время создания записи
+        updated_at:
+          type: string
+          format: date-time
+          description: Время последнего обновления записи
+
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Человекочитаемое описание ошибки
+          example: "Threat not found"
+        details:
+          type: string
+          description: Дополнительная информация
+          example: "No threat with MD5 d41d8cd98f00b204e9800998ecf8427e found"
